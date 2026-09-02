@@ -1,7 +1,7 @@
 # Cuaderno de Bachillerato
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Bode512/cuaderno_bach/main/public/favicon.gif" alt="favicon animado" width="64" />
+  <img src="https://raw.githubusercontent.com/Bode512/cuaderno_bach/main/public/app_icon_animated_v2.gif" alt="favicon animado" width="512" />
 </p>
 
 Aplicación web de escritorio para estudiantes de 2.º de Bachillerato. Organiza horarios, tareas, exámenes, calificaciones, fórmulas, flashcards y más en una única interfaz con diseño glassmorphism y modo oscuro.
