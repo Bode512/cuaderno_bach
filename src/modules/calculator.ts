@@ -172,7 +172,7 @@ function renderSimulator(el: HTMLElement) {
 function renderGrades(el: HTMLElement) {
   const grades = storage.get<GradeEntry[]>('grades', []);
   const evaluations = ['1ª Evaluación', '2ª Evaluación', '3ª Evaluación'];
-  const subjects = ['Valenciano','Lengua Castellana','Física','Química','Historia','Filosofía','Matemáticas','Tecnología','Biología'];
+  const subjects = ['Valenciano','Inglés','Lengua Castellana','Física','Química','Historia','Filosofía','Matemáticas','Tecnología','Biología'];
 
   let html = `<div class="glass-card"><h3>Mis notas</h3>`;
 

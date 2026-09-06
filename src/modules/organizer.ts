@@ -1,6 +1,6 @@
 import { storage } from '../storage';
+import { SUBJECTS } from '../subjects';
 
-// Types
 interface ScheduleSlot {
   day: number;
   hour: number;
@@ -22,14 +22,6 @@ interface ExamCountdown {
   subject: string;
 }
 
-interface CalendarEvent {
-  id: string;
-  title: string;
-  date: string;
-  subject: string;
-  type: 'entrega' | 'trabajo' | 'examen';
-}
-
 interface StudySession {
   id: string;
   subject: string;
@@ -39,7 +31,6 @@ interface StudySession {
 
 const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
 const HOURS = ['8:00','9:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00'];
-const SUBJECTS = ['Valenciano','Lengua Castellana','Física','Química','Historia','Filosofía','Matemáticas','Tecnología','Biología'];
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -58,9 +49,15 @@ function daysUntil(d: string): number {
   return Math.ceil((target.getTime() - now.getTime()) / 86400000);
 }
 
-type SubTab = 'horario' | 'tareas' | 'examenes' | 'calendario' | 'horas';
+type SubTab = 'horario' | 'tareas' | 'examenes' | 'horas' | 'copia';
 
 let subTab: SubTab = 'horario';
+
+const ALL_STORAGE_KEYS = [
+  'theme', 'lastTab', 'schedule', 'tasks', 'exams', 'study',
+  'calendar', 'grades', 'flashcards', 'customFormulas', 'notes',
+  'courseConfig', 'pauSubjects', 'backupReminder',
+];
 
 export function renderOrganizer(el: HTMLElement) {
   el.innerHTML = `
@@ -69,8 +66,8 @@ export function renderOrganizer(el: HTMLElement) {
       <button class="module-tab ${subTab==='horario'?'active':''}" data-stab="horario">Horario</button>
       <button class="module-tab ${subTab==='tareas'?'active':''}" data-stab="tareas">Tareas</button>
       <button class="module-tab ${subTab==='examenes'?'active':''}" data-stab="examenes">Exámenes</button>
-      <button class="module-tab ${subTab==='calendario'?'active':''}" data-stab="calendario">Calendario</button>
       <button class="module-tab ${subTab==='horas'?'active':''}" data-stab="horas">Horas</button>
+      <button class="module-tab ${subTab==='copia'?'active':''}" data-stab="copia">Copia</button>
     </div>
     <div id="organizer-content"></div>
   `;
@@ -87,12 +84,11 @@ export function renderOrganizer(el: HTMLElement) {
     case 'horario': renderSchedule(content); break;
     case 'tareas': renderTasks(content); break;
     case 'examenes': renderExams(content); break;
-    case 'calendario': renderCalendar(content); break;
     case 'horas': renderStudyTracker(content); break;
+    case 'copia': renderBackup(content); break;
   }
 }
 
-// ===== Feature 1: Horario semanal =====
 function renderSchedule(el: HTMLElement) {
   const schedule = storage.get<ScheduleSlot[]>('schedule', []);
 
@@ -155,7 +151,6 @@ function renderSchedule(el: HTMLElement) {
   });
 }
 
-// ===== Feature 2: Lista de tareas =====
 function renderTasks(el: HTMLElement) {
   const tasks = storage.get<Task[]>('tasks', []);
 
@@ -226,7 +221,6 @@ function renderTasks(el: HTMLElement) {
   });
 }
 
-// ===== Feature 3: Cuenta atrás para exámenes =====
 function renderExams(el: HTMLElement) {
   const exams = storage.get<ExamCountdown[]>('exams', []);
 
@@ -285,99 +279,6 @@ function renderExams(el: HTMLElement) {
   });
 }
 
-// ===== Feature 4: Calendario de entregas =====
-function renderCalendar(el: HTMLElement) {
-  const events = storage.get<CalendarEvent[]>('calendar', []);
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const monthName = now.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-  const offset = (firstDay + 6) % 7;
-
-  let html = `<div class="glass-card"><h3>${monthName}</h3>
-    <div class="grid-4" style="margin-top:12px;">`;
-
-  const dayNames = ['L','M','X','J','V','S','D'];
-  dayNames.forEach(d => { html += `<div style="text-align:center;font-size:11px;font-weight:600;color:var(--ink-muted);padding:4px;">${d}</div>`; });
-
-  for (let i = 0; i < offset; i++) html += `<div></div>`;
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const dayEvents = events.filter(e => e.date === dateStr);
-    const isToday = d === now.getDate();
-    html += `<div class="schedule-cell ${isToday ? 'filled' : ''}" style="min-height:40px;flex-direction:column;gap:2px;">
-      <div style="font-size:12px;">${d}</div>
-      ${dayEvents.map(e => `<div style="width:6px;height:6px;border-radius:50%;background:${e.type==='examen'?'#e74c3c':e.type==='entrega'?'var(--accent)':'#f39c12'};"></div>`).join('')}
-    </div>`;
-  }
-
-  html += `</div></div>`;
-
-  html += `<div class="glass-card"><h3>Eventos del mes</h3>`;
-  const monthEvents = events.filter(e => {
-    const d = new Date(e.date + 'T00:00:00');
-    return d.getMonth() === month && d.getFullYear() === year;
-  }).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  if (monthEvents.length === 0) {
-    html += `<p style="font-size:13px;">No hay eventos este mes</p>`;
-  } else {
-    monthEvents.forEach(e => {
-      const colors: Record<string, string> = { examen: '#e74c3c', entrega: 'var(--accent)', trabajo: '#f39c12' };
-      html += `<div class="task-item">
-        <div style="width:4px;height:32px;border-radius:2px;background:${colors[e.type]};flex-shrink:0;"></div>
-        <div class="task-info">
-          <div class="task-title">${e.title}</div>
-          <div class="task-meta">${e.subject} · ${formatDate(e.date)} · <span class="badge">${e.type}</span></div>
-        </div>
-        <button class="btn btn-ghost" style="font-size:11px;" data-del-cal="${e.id}">×</button>
-      </div>`;
-    });
-  }
-  html += `</div>`;
-
-  html += `<div class="glass-card"><h3>Nuevo evento</h3>
-    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
-      <input class="input" id="cal-title" placeholder="Título" style="flex:1;min-width:120px;">
-      <select class="input" id="cal-type" style="width:auto;">
-        <option value="entrega">Entrega</option>
-        <option value="trabajo">Trabajo</option>
-        <option value="examen">Examen</option>
-      </select>
-      <select class="input" id="cal-subject" style="width:auto;">
-        ${SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('')}
-      </select>
-      <input class="input" id="cal-date" type="date" style="width:auto;">
-      <button class="btn btn-primary" id="cal-add">Agregar</button>
-    </div>
-  </div>`;
-
-  el.innerHTML = html;
-
-  el.querySelectorAll('[data-del-cal]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = (btn as HTMLElement).dataset.delCal!;
-      const idx = events.findIndex(e => e.id === id);
-      if (idx >= 0) { events.splice(idx, 1); storage.set('calendar', events); renderCalendar(el); }
-    });
-  });
-
-  el.querySelector('#cal-add')?.addEventListener('click', () => {
-    const title = (el.querySelector('#cal-title') as HTMLInputElement).value.trim();
-    const type = (el.querySelector('#cal-type') as HTMLSelectElement).value as CalendarEvent['type'];
-    const subject = (el.querySelector('#cal-subject') as HTMLSelectElement).value;
-    const date = (el.querySelector('#cal-date') as HTMLInputElement).value;
-    if (!title || !date) return;
-    events.push({ id: genId(), title, date, subject, type });
-    storage.set('calendar', events);
-    renderCalendar(el);
-  });
-}
-
-// ===== Feature 5: Rastreador de horas =====
 function renderStudyTracker(el: HTMLElement) {
   const sessions = storage.get<StudySession[]>('study', []);
   const today = new Date().toISOString().slice(0, 10);
@@ -453,5 +354,87 @@ function renderStudyTracker(el: HTMLElement) {
     sessions.push({ id: genId(), subject, date, hours });
     storage.set('study', sessions);
     renderStudyTracker(el);
+  });
+}
+
+function renderBackup(el: HTMLElement) {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+
+  let html = `<div class="glass-card">
+    <h3>Copia de seguridad</h3>
+    <p style="font-size:13px;margin-bottom:16px;">
+      Esta app almacena todos los datos en el navegador (localStorage). Si borras la caché del navegador, pierdes los datos.
+      Haz copias de seguridad periódicas para no perder nada.
+    </p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary" id="backup-export">💾 Exportar copia de seguridad</button>
+      <button class="btn btn-secondary" id="backup-import-btn">📂 Importar copia de seguridad</button>
+      <input type="file" id="backup-import-input" accept=".json" style="display:none;">
+    </div>
+  </div>`;
+
+  html += `<div class="glass-card">
+    <h3>Datos actuales</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">`;
+  ALL_STORAGE_KEYS.forEach(key => {
+    const val = localStorage.getItem('bachi_' + key);
+    const size = val ? (new Blob([val]).size / 1024).toFixed(1) : '0';
+    html += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border-subtle);">
+      <span style="color:var(--ink-muted);">${key}</span><span style="font-weight:500;">${size} KB</span>
+    </div>`;
+  });
+  html += '</div></div>';
+
+  html += `<div class="glass-card">
+    <h3>Advertencia importante</h3>
+    <p style="font-size:13px;">
+      Esta app se aloja en Vercel (plan gratuito) como sitio estático. <strong>No hay base de datos en servidor.</strong>
+      Todos viven en el navegador del usuario. Borrar caché del navegador borra los datos si no hay backup.
+      Exporta regularmente tu copia de seguridad.
+    </p>
+  </div>`;
+
+  el.innerHTML = html;
+
+  el.querySelector('#backup-export')?.addEventListener('click', () => {
+    const data: Record<string, unknown> = {};
+    ALL_STORAGE_KEYS.forEach(key => {
+      const val = localStorage.getItem('bachi_' + key);
+      if (val !== null) data[key] = JSON.parse(val);
+    });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cuaderno-backup-${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  el.querySelector('#backup-import-btn')?.addEventListener('click', () => {
+    (el.querySelector('#backup-import-input') as HTMLInputElement).click();
+  });
+
+  el.querySelector('#backup-import-input')?.addEventListener('change', (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result as string);
+        if (!confirm('¿Seguro que quieres restaurar esta copia de seguridad? Se sobrescribirán todos los datos actuales.')) return;
+        ALL_STORAGE_KEYS.forEach(key => {
+          if (data[key] !== undefined) {
+            localStorage.setItem('bachi_' + key, JSON.stringify(data[key]));
+          }
+        });
+        alert('Copia de seguridad restaurada. Recarga la página para ver los cambios.');
+        window.location.reload();
+      } catch {
+        alert('Error al leer el archivo. Asegúrate de que es un archivo de backup válido.');
+      }
+    };
+    reader.readAsText(file);
   });
 }

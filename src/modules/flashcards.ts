@@ -25,7 +25,13 @@ function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-const SUBJECTS = ['Valenciano','Lengua Castellana','Física','Química','Historia','Filosofía','Matemáticas','Tecnología','Biología'];
+const SUBJECTS = ['Valenciano','Inglés','Lengua Castellana','Física','Química','Historia','Filosofía','Matemáticas','Tecnología','Biología'];
+
+let rouletteInterval: number | null = null;
+
+export function cleanupFlashcards() {
+  if (rouletteInterval) { clearInterval(rouletteInterval); rouletteInterval = null; }
+}
 
 export function renderFlashcards(el: HTMLElement) {
   el.innerHTML = `
@@ -377,12 +383,13 @@ function renderRoulette(el: HTMLElement) {
 
     let count = 0;
     const maxCount = 15;
-    const interval = setInterval(() => {
+    rouletteInterval = window.setInterval(() => {
       const randomCard = cards[Math.floor(Math.random() * cards.length)];
       display.innerHTML = `<div style="font-family:var(--font-display);font-size:1.3rem;font-weight:600;padding:16px;">${randomCard.question}</div>`;
       count++;
       if (count >= maxCount) {
-        clearInterval(interval);
+        if (rouletteInterval) clearInterval(rouletteInterval);
+        rouletteInterval = null;
         const finalCard = cards[Math.floor(Math.random() * cards.length)];
         showCardPreview(finalCard);
         spinning = false;

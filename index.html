@@ -13,7 +13,8 @@
   <script>
     (function() {
       var t = localStorage.getItem('bachi_theme');
-      if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      if (t === 'light') { /* keep light */ }
+      else document.documentElement.setAttribute('data-theme', 'dark');
     })();
   </script>
 </head>

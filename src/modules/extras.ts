@@ -1,6 +1,6 @@
 import { storage } from '../storage';
+import { SUBJECTS } from '../subjects';
 
-// Types
 interface Note {
   id: string;
   subject: string;
@@ -8,9 +8,92 @@ interface Note {
   updated: string;
 }
 
+interface PomodoroState {
+  isRunning: boolean;
+  phase: 'work' | 'break' | 'longBreak';
+  startTime: number | null;
+  pomodoroCount: number;
+  workMinutes: number;
+  breakMinutes: number;
+  longBreakMinutes: number;
+  linkedSubject: string;
+  linkedTaskId: string | null;
+}
+
+interface PomodoroHistoryEntry {
+  id: string;
+  subject: string;
+  taskName: string;
+  date: string;
+  duration: number;
+  phase: 'work' | 'break' | 'longBreak';
+}
+
 type SubTab = 'pomodoro' | 'unidades' | 'notas';
 
 let subTab: SubTab = 'pomodoro';
+
+let pomodoroRaf: number | null = null;
+
+const DEFAULT_POMODORO: PomodoroState = {
+  isRunning: false,
+  phase: 'work',
+  startTime: null,
+  pomodoroCount: 0,
+  workMinutes: 25,
+  breakMinutes: 5,
+  longBreakMinutes: 15,
+  linkedSubject: SUBJECTS[0],
+  linkedTaskId: null,
+};
+
+function getPomodoroState(): PomodoroState {
+  return storage.get<PomodoroState>('pomodoro', DEFAULT_POMODORO);
+}
+
+function savePomodoroState(state: PomodoroState) {
+  storage.set('pomodoro', state);
+}
+
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 800;
+    osc.type = 'sine';
+    gain.gain.value = 0.3;
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+    osc.stop(ctx.currentTime + 0.5);
+  } catch { /* noop */ }
+}
+
+function formatTime(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+
+function phaseDuration(phase: 'work' | 'break' | 'longBreak', state: PomodoroState): number {
+  switch (phase) {
+    case 'work': return state.workMinutes * 60;
+    case 'break': return state.breakMinutes * 60;
+    case 'longBreak': return state.longBreakMinutes * 60;
+  }
+}
+
+function computeRemaining(state: PomodoroState): number {
+  if (!state.isRunning || !state.startTime) return phaseDuration(state.phase, state);
+  const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+  return Math.max(0, phaseDuration(state.phase, state) - elapsed);
+}
+
+export function cleanupExtras() {
+  if (pomodoroRaf) { cancelAnimationFrame(pomodoroRaf); pomodoroRaf = null; }
+}
 
 export function renderExtras(el: HTMLElement) {
   el.innerHTML = `
@@ -38,33 +121,66 @@ export function renderExtras(el: HTMLElement) {
   }
 }
 
-// ===== Feature 14: Pomodoro =====
+// ===== POMODORO =====
 function renderPomodoro(el: HTMLElement) {
-  let workMinutes = 25;
-  let breakMinutes = 5;
-  let longBreakMinutes = 15;
-  let timeLeft = workMinutes * 60;
-  let isRunning = false;
-  let isBreak = false;
-  let pomodoroCount = 0;
-  let interval: number | null = null;
+  const state = getPomodoroState();
+  const tasks = storage.get<{id:string;title:string;subject:string;done:boolean;deadline:string}[]>('tasks', []);
+  const pendingTasks = tasks.filter(t => !t.done);
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
-    const sec = s % 60;
-    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-  };
+  if (pomodoroRaf) { cancelAnimationFrame(pomodoroRaf); pomodoroRaf = null; }
 
-  const render = () => {
+  function render() {
+    const current = getPomodoroState();
+    const remaining = computeRemaining(current);
+    const total = phaseDuration(current.phase, current);
+    const progress = total > 0 ? ((total - remaining) / total) * 100 : 0;
+    const isWork = current.phase === 'work';
+    const isLongBreak = current.phase === 'longBreak';
+    const phaseLabel = isWork ? 'Tiempo de estudio' : isLongBreak ? 'Descanso largo' : 'Descanso corto';
+    const phaseColor = isWork ? 'var(--accent)' : isLongBreak ? '#00b894' : '#00cec9';
+
     el.innerHTML = `
       <div class="glass-card" style="text-align:center;">
         <h3>Pomodoro</h3>
-        <p style="font-size:13px;margin-bottom:8px;">${isBreak ? (pomodoroCount % 4 === 0 ? 'Descanso largo' : 'Descanso corto') : 'Tiempo de estudio'}</p>
-        <div class="pomodoro-display">${formatTime(timeLeft)}</div>
-        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:16px;">Pomodoros completados: ${pomodoroCount}</div>
+        <p class="help-text">${phaseLabel} · Pomodoro #${(current.pomodoroCount || 0) + (isWork ? 1 : 0)}</p>
+        <div class="pomodoro-phase-indicator" style="display:flex;gap:6px;justify-content:center;margin-bottom:16px;">
+          ${[1,2,3,4].map(i => `<div class="pomodoro-dot ${i <= (current.pomodoroCount % 4) ? 'pomodoro-dot-done' : ''} ${i === (current.pomodoroCount % 4) + 1 && isWork ? 'pomodoro-dot-active' : ''}"></div>`).join('')}
+        </div>
+        <div style="position:relative;width:200px;height:200px;margin:0 auto 16px;">
+          <svg style="transform:rotate(-90deg);width:200px;height:200px;" viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="90" fill="none" stroke="var(--border-subtle)" stroke-width="8"/>
+            <circle cx="100" cy="100" r="90" fill="none" stroke="${phaseColor}" stroke-width="8"
+              stroke-dasharray="${2 * Math.PI * 90}"
+              stroke-dashoffset="${2 * Math.PI * 90 * (1 - progress / 100)}"
+              stroke-linecap="round" style="transition:stroke-dashoffset 0.5s linear;"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">
+            <div class="pomodoro-display" style="margin:0;font-size:3rem;">${formatTime(remaining)}</div>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--ink-muted);margin-bottom:16px;">Completados: ${current.pomodoroCount}</div>
         <div class="pomodoro-controls">
-          <button class="btn btn-primary" id="pom-toggle">${isRunning ? 'Pausar' : 'Iniciar'}</button>
+          <button class="btn btn-primary" id="pom-toggle">${current.isRunning ? 'Pausar' : 'Iniciar'}</button>
           <button class="btn btn-secondary" id="pom-reset">Reiniciar</button>
+          <button class="btn btn-secondary" id="pom-skip">Saltar</button>
+        </div>
+      </div>
+      <div class="glass-card">
+        <h3>Vincular a</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          <div>
+            <label class="input-label">Asignatura</label>
+            <select class="input" id="pom-subject">
+              ${SUBJECTS.map(s => `<option value="${s}" ${s === current.linkedSubject ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="input-label">Tarea (opcional)</label>
+            <select class="input" id="pom-task">
+              <option value="">Sin tarea vinculada</option>
+              ${pendingTasks.map(t => `<option value="${t.id}" ${t.id === current.linkedTaskId ? 'selected' : ''}>${t.title} (${t.subject})</option>`).join('')}
+            </select>
+          </div>
         </div>
       </div>
       <div class="glass-card">
@@ -72,74 +188,185 @@ function renderPomodoro(el: HTMLElement) {
         <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <label style="font-size:13px;">Estudio (min)</label>
-            <input class="input" id="pom-work" type="number" min="1" max="60" value="${workMinutes}" style="width:70px;text-align:center;">
+            <input class="input" id="pom-work" type="number" min="1" max="60" value="${current.workMinutes}" style="width:70px;text-align:center;">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <label style="font-size:13px;">Descanso corto (min)</label>
-            <input class="input" id="pom-break" type="number" min="1" max="30" value="${breakMinutes}" style="width:70px;text-align:center;">
+            <input class="input" id="pom-break" type="number" min="1" max="30" value="${current.breakMinutes}" style="width:70px;text-align:center;">
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <label style="font-size:13px;">Descanso largo (min)</label>
-            <input class="input" id="pom-long" type="number" min="1" max="60" value="${longBreakMinutes}" style="width:70px;text-align:center;">
+            <input class="input" id="pom-long" type="number" min="1" max="60" value="${current.longBreakMinutes}" style="width:70px;text-align:center;">
           </div>
         </div>
-      </div>`;
+      </div>
+      <div class="glass-card">
+        <h3>Historial reciente</h3>
+        ${renderPomodoroHistory()}
+      </div>
+    `;
 
+    // Update display every second
+    if (current.isRunning) {
+      const tick = () => {
+        const s = getPomodoroState();
+        if (!s.isRunning) return;
+        const rem = computeRemaining(s);
+        const display = el.querySelector('.pomodoro-display');
+        if (display) display.textContent = formatTime(rem);
+        const circle = el.querySelector('circle:last-child') as SVGCircleElement;
+        if (circle) {
+          const tot = phaseDuration(s.phase, s);
+          const prog = tot > 0 ? ((tot - rem) / tot) * 100 : 0;
+          circle.setAttribute('stroke-dashoffset', String(2 * Math.PI * 90 * (1 - prog / 100)));
+        }
+        if (rem <= 0) {
+          handlePhaseEnd(s);
+          return;
+        }
+        pomodoroRaf = requestAnimationFrame(tick);
+      };
+      pomodoroRaf = requestAnimationFrame(tick);
+    }
+
+    attachPomodoroEvents(el, pendingTasks);
+  }
+
+  function handlePhaseEnd(s: PomodoroState) {
+    playBeep();
+    const wasWork = s.phase === 'work';
+    const nextPomodoroCount = wasWork ? s.pomodoroCount + 1 : s.pomodoroCount;
+
+    if (wasWork) {
+      logStudySession(s);
+    }
+
+    let nextPhase: PomodoroState['phase'];
+    if (wasWork) {
+      nextPhase = nextPomodoroCount % 4 === 0 ? 'longBreak' : 'break';
+    } else {
+      nextPhase = 'work';
+    }
+
+    const newState: PomodoroState = {
+      ...s,
+      isRunning: false,
+      phase: nextPhase,
+      startTime: null,
+      pomodoroCount: nextPomodoroCount,
+    };
+    savePomodoroState(newState);
+
+    if (Notification.permission === 'granted') {
+      new Notification('Pomodoro', {
+        body: wasWork ? '¡Tiempo de descanso!' : '¡Hora de estudiar!',
+      });
+    }
+
+    render();
+  }
+
+  function logStudySession(s: PomodoroState) {
+    const sessions = storage.get<{id:string;subject:string;date:string;hours:number}[]>('study', []);
+    const duration = phaseDuration('work', s);
+    const task = s.linkedTaskId ? tasks.find(t => t.id === s.linkedTaskId) : null;
+    sessions.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      subject: s.linkedSubject,
+      date: new Date().toISOString().slice(0, 10),
+      hours: Math.round((duration / 3600) * 10) / 10,
+    });
+    storage.set('study', sessions);
+
+    const history = storage.get<PomodoroHistoryEntry[]>('pomodoroHistory', []);
+    history.unshift({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      subject: s.linkedSubject,
+      taskName: task?.title || '',
+      date: new Date().toISOString().slice(0, 10),
+      duration: duration,
+      phase: 'work',
+    });
+    storage.set('pomodoroHistory', history.slice(0, 50));
+  }
+
+  function attachPomodoroEvents(el: HTMLElement, pendingTasks: {id:string;title:string;subject:string}[]) {
     el.querySelector('#pom-toggle')?.addEventListener('click', () => {
-      if (isRunning) {
-        if (interval) clearInterval(interval);
-        isRunning = false;
-      } else {
-        isRunning = true;
-        interval = window.setInterval(() => {
-          timeLeft--;
-          if (timeLeft <= 0) {
-            if (interval) clearInterval(interval);
-            isRunning = false;
-            if (isBreak) {
-              isBreak = false;
-              timeLeft = workMinutes * 60;
-            } else {
-              pomodoroCount++;
-              if (pomodoroCount % 4 === 0) {
-                timeLeft = longBreakMinutes * 60;
-              } else {
-                timeLeft = breakMinutes * 60;
-              }
-              isBreak = true;
-            }
-            render();
-          } else {
-            const display = el.querySelector('.pomodoro-display');
-            if (display) display.textContent = formatTime(timeLeft);
-          }
-        }, 1000);
+      const s = getPomodoroState();
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
       }
-      render();
+      if (s.isRunning) {
+        const elapsed = s.startTime ? Math.floor((Date.now() - s.startTime) / 1000) : 0;
+        savePomodoroState({ ...s, isRunning: false, startTime: null });
+        render();
+      } else {
+        const dur = phaseDuration(s.phase, s);
+        const remaining = computeRemaining(s);
+        savePomodoroState({
+          ...s,
+          isRunning: true,
+          startTime: Date.now() - ((dur - remaining) * 1000),
+        });
+        render();
+      }
     });
 
     el.querySelector('#pom-reset')?.addEventListener('click', () => {
-      if (interval) clearInterval(interval);
-      isRunning = false;
-      isBreak = false;
-      timeLeft = workMinutes * 60;
+      const s = getPomodoroState();
+      savePomodoroState({ ...s, isRunning: false, phase: 'work', startTime: null });
       render();
+    });
+
+    el.querySelector('#pom-skip')?.addEventListener('click', () => {
+      const s = getPomodoroState();
+      handlePhaseEnd({ ...s, isRunning: false });
+    });
+
+    el.querySelector('#pom-subject')?.addEventListener('change', (e) => {
+      const s = getPomodoroState();
+      s.linkedSubject = (e.target as HTMLSelectElement).value;
+      savePomodoroState(s);
+    });
+
+    el.querySelector('#pom-task')?.addEventListener('change', (e) => {
+      const s = getPomodoroState();
+      s.linkedTaskId = (e.target as HTMLSelectElement).value || null;
+      savePomodoroState(s);
     });
 
     ['pom-work', 'pom-break', 'pom-long'].forEach(id => {
       el.querySelector(`#${id}`)?.addEventListener('change', (e) => {
         const val = parseInt((e.target as HTMLInputElement).value) || 25;
-        if (id === 'pom-work') workMinutes = val;
-        else if (id === 'pom-break') breakMinutes = val;
-        else longBreakMinutes = val;
+        const s = getPomodoroState();
+        if (id === 'pom-work') s.workMinutes = val;
+        else if (id === 'pom-break') s.breakMinutes = val;
+        else s.longBreakMinutes = val;
+        savePomodoroState(s);
       });
     });
-  };
+  }
 
   render();
 }
 
-// ===== Feature 15: Conversor de unidades =====
+function renderPomodoroHistory(): string {
+  const history = storage.get<PomodoroHistoryEntry[]>('pomodoroHistory', []);
+  if (history.length === 0) return '<p style="font-size:13px;">No hay sesiones completadas aún.</p>';
+  return '<div style="display:flex;flex-direction:column;gap:6px;">' +
+    history.slice(0, 10).map(h => {
+      const mins = Math.round(h.duration / 60);
+      const date = new Date(h.date + 'T00:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      return `<div class="task-item" style="padding:8px 12px;">
+        <div class="task-info">
+          <div class="task-title" style="font-size:13px;">${h.subject}${h.taskName ? ` · ${h.taskName}` : ''}</div>
+          <div class="task-meta">${date} · ${mins}min estudio</div>
+        </div>
+      </div>`;
+    }).join('') + '</div>';
+}
+
+// ===== CONVERSOR DE UNIDADES =====
 function renderUnitConverter(el: HTMLElement) {
   const categories = [
     {
@@ -274,10 +501,10 @@ function renderUnitConverter(el: HTMLElement) {
   render();
 }
 
-// ===== Feature 16: Bloc de notas =====
+// ===== BLOC DE NOTAS =====
 function renderNotes(el: HTMLElement) {
   const notes = storage.get<Note[]>('notes', []);
-  const subjects = ['General', 'Valenciano','Lengua Castellana','Física','Química','Historia','Filosofía','Matemáticas','Tecnología','Biología'];
+  const noteSubjects = ['General', ...SUBJECTS];
   let activeSubject = 'General';
 
   const render = () => {
@@ -286,8 +513,12 @@ function renderNotes(el: HTMLElement) {
     el.innerHTML = `
       <div class="glass-card">
         <h3>Bloc de notas</h3>
-        <div class="module-tabs" style="margin-top:8px;">
-          ${subjects.map(s => `<button class="module-tab ${s === activeSubject ? 'active' : ''}" data-notefilter="${s}">${s}</button>`).join('')}
+        <div class="notes-subject-scroll" style="margin-top:8px;">
+          <button class="scroll-arrow" id="notes-scroll-left">&#9664;</button>
+          <div class="notes-subject-list" id="notes-subject-list">
+            ${noteSubjects.map(s => `<button class="module-tab ${s === activeSubject ? 'active' : ''}" data-notefilter="${s}">${s}</button>`).join('')}
+          </div>
+          <button class="scroll-arrow" id="notes-scroll-right">&#9654;</button>
         </div>
       </div>
       <div class="glass-card">
@@ -304,6 +535,20 @@ function renderNotes(el: HTMLElement) {
         render();
       });
     });
+
+    const scrollList = el.querySelector('#notes-subject-list') as HTMLElement;
+    const scrollLeftBtn = el.querySelector('#notes-scroll-left') as HTMLButtonElement;
+    const scrollRightBtn = el.querySelector('#notes-scroll-right') as HTMLButtonElement;
+
+    if (scrollList && scrollLeftBtn && scrollRightBtn) {
+      const scrollAmount = 160;
+      scrollLeftBtn.addEventListener('click', () => {
+        scrollList.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+      });
+      scrollRightBtn.addEventListener('click', () => {
+        scrollList.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+      });
+    }
 
     const textarea = el.querySelector('#notes-area') as HTMLTextAreaElement;
     let saveTimeout: number | null = null;
