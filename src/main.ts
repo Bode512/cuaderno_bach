@@ -125,19 +125,21 @@ function initBackupReminder() {
 }
 
 function initGestureNavigation() {
-  const tabBar = document.getElementById('tab-bar')!;
   let touchStartX = 0;
   let touchStartY = 0;
   let isSwiping = false;
+  let touchOnTabBar = false;
 
   document.addEventListener('touchstart', (e) => {
+    const target = e.target as HTMLElement;
+    touchOnTabBar = !!target.closest('#tab-bar');
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
     isSwiping = false;
   }, { passive: true });
 
   document.addEventListener('touchend', (e) => {
-    if (!isSwiping) return;
+    if (!isSwiping || touchOnTabBar) return;
     const touchEndX = e.changedTouches[0].clientX;
     const touchEndY = e.changedTouches[0].clientY;
     const dx = touchEndX - touchStartX;
@@ -157,7 +159,7 @@ function initGestureNavigation() {
   }, { passive: true });
 
   document.addEventListener('touchmove', (e) => {
-    if (isSwiping) return;
+    if (isSwiping || touchOnTabBar) return;
     const touchMoveX = e.touches[0].clientX;
     const touchMoveY = e.touches[0].clientY;
     const dx = Math.abs(touchMoveX - touchStartX);
@@ -168,41 +170,6 @@ function initGestureNavigation() {
   }, { passive: true });
 }
 
-function initMobileNavScroll() {
-  if (window.innerWidth >= 768) return;
-  const tabBar = document.getElementById('tab-bar')!;
-
-  const checkOverflow = () => {
-    if (tabBar.scrollWidth > tabBar.clientWidth) {
-      tabBar.classList.add('has-overflow');
-    } else {
-      tabBar.classList.remove('has-overflow');
-    }
-  };
-
-  checkOverflow();
-  window.addEventListener('resize', checkOverflow);
-
-  let isDragging = false;
-  let startX = 0;
-  let scrollLeft = 0;
-
-  tabBar.addEventListener('touchstart', (e) => {
-    isDragging = true;
-    startX = e.touches[0].pageX - tabBar.offsetLeft;
-    scrollLeft = tabBar.scrollLeft;
-  }, { passive: true });
-
-  tabBar.addEventListener('touchmove', (e) => {
-    if (!isDragging) return;
-    const x = e.touches[0].pageX - tabBar.offsetLeft;
-    const walk = (x - startX) * 1.5;
-    tabBar.scrollLeft = scrollLeft - walk;
-  }, { passive: true });
-
-  tabBar.addEventListener('touchend', () => { isDragging = false; }, { passive: true });
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   renderTabBar();
   renderers[currentTab](document.getElementById('main-content')!);
@@ -210,5 +177,4 @@ document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   initBackupReminder();
   initGestureNavigation();
-  initMobileNavScroll();
 });

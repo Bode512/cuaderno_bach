@@ -109,28 +109,11 @@ body {
     transform: translateX(-50%);
     border-radius: 999px;
     box-shadow: var(--shadow-glass);
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
     max-width: calc(100vw - 32px);
   }
-  .tab-bar::-webkit-scrollbar { display: none; }
   .tab-bar.scrolled {
     padding: 6px 12px;
     transform: translateX(-50%) scale(0.95);
-  }
-  .tab-bar.has-overflow::after {
-    content: '';
-    position: sticky;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 32px;
-    flex-shrink: 0;
-    background: linear-gradient(to right, transparent, var(--surface-glass));
-    pointer-events: none;
-    border-radius: 0 999px 999px 0;
   }
 }
 
@@ -510,6 +493,15 @@ th {
 
   .glass-card {
     padding: 16px;
+  }
+
+  .scroll-arrow {
+    display: flex !important;
+    opacity: 1;
+  }
+
+  .notes-subject-scroll {
+    gap: 2px;
   }
 }
 
