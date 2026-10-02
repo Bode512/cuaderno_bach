@@ -1,7 +1,7 @@
 export const SUBJECTS = [
   'Valenciano', 'Lengua Castellana', 'Física', 'Química',
   'Historia', 'Filosofía', 'Matemáticas', 'Tecnología', 'Biología',
-  'Inglés', 'Educación Física', 'Dibujo',
+  'Inglés', 'Educación Física', 'Dibujo',"Atención educativa",
 ];
 
 export const SUBJECT_COLORS: Record<string, string> = {
