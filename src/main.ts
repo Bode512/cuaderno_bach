@@ -5,15 +5,17 @@ import { renderFormulas } from './modules/formulas';
 import { renderExtras, cleanupExtras } from './modules/extras';
 import { renderCalendar } from './modules/calendar';
 import { renderPauPrep } from './modules/pauprep';
+import { renderSchedule } from './modules/schedule';
 import { storage } from './storage';
 
-type Tab = 'organizer' | 'calendar' | 'pauprep' | 'calculator' | 'flashcards' | 'formulas' | 'extras';
+type Tab = 'organizer' | 'schedule' | 'calendar' | 'pauprep' | 'calculator' | 'flashcards' | 'formulas' | 'extras';
 
 const tabs: { id: Tab; label: string; icon: string }[] = [
-  { id: 'organizer', label: 'Organizar', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>' },
-  { id: 'calendar', label: 'Calendario', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><rect x="7" y="13" width="3" height="3" rx="0.5"/><rect x="14" y="13" width="3" height="3" rx="0.5"/></svg>' },
+  { id: 'organizer', label: 'Organizar', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
+  { id: 'schedule', label: 'Horario', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M8 12h3v3H8zm5 0h3v3h-3z"/></svg>' },
+  { id: 'calendar', label: 'Calendario', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
   { id: 'pauprep', label: 'PAU', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>' },
-  { id: 'calculator', label: 'Notas', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h4M8 18h4"/></svg>' },
+  { id: 'calculator', label: 'Notas', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h8M8 18h5"/></svg>' },
   { id: 'flashcards', label: 'Fichas', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>' },
   { id: 'formulas', label: 'Fórmulas', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 7h6M9 11h6M9 15h4"/><circle cx="12" cy="12" r="10"/></svg>' },
   { id: 'extras', label: 'Extras', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>' },
@@ -23,6 +25,7 @@ let currentTab: Tab = (storage.get<string>('lastTab', 'organizer') as Tab) || 'o
 
 const renderers: Record<Tab, (el: HTMLElement) => void> = {
   organizer: renderOrganizer,
+  schedule: renderSchedule,
   calendar: renderCalendar,
   pauprep: renderPauPrep,
   calculator: renderCalculator,
