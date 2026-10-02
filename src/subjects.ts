@@ -1,6 +1,7 @@
 export const SUBJECTS = [
   'Valenciano', 'Lengua Castellana', 'Física', 'Química',
   'Historia', 'Filosofía', 'Matemáticas', 'Tecnología', 'Biología',
+  'Inglés', 'Educación Física', 'Dibujo',
 ];
 
 export const SUBJECT_COLORS: Record<string, string> = {
@@ -13,4 +14,7 @@ export const SUBJECT_COLORS: Record<string, string> = {
   'Matemáticas': '#D63031',
   'Tecnología': '#00CEC9',
   'Biología': '#55EFC4',
+  'Inglés': '#F39C12',
+  'Educación Física': '#27AE60',
+  'Dibujo': '#8E44AD',
 };
