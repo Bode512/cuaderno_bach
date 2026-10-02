@@ -5,14 +5,12 @@ import { renderFormulas } from './modules/formulas';
 import { renderExtras, cleanupExtras } from './modules/extras';
 import { renderCalendar } from './modules/calendar';
 import { renderPauPrep } from './modules/pauprep';
-import { renderSchedule } from './modules/schedule';
 import { storage } from './storage';
 
-type Tab = 'organizer' | 'schedule' | 'calendar' | 'pauprep' | 'calculator' | 'flashcards' | 'formulas' | 'extras';
+type Tab = 'organizer' | 'calendar' | 'pauprep' | 'calculator' | 'flashcards' | 'formulas' | 'extras';
 
 const tabs: { id: Tab; label: string; icon: string }[] = [
   { id: 'organizer', label: 'Organizar', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
-  { id: 'schedule', label: 'Horario', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/><path d="M8 12h3v3H8zm5 0h3v3h-3z"/></svg>' },
   { id: 'calendar', label: 'Calendario', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' },
   { id: 'pauprep', label: 'PAU', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>' },
   { id: 'calculator', label: 'Notas', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 10h8M8 14h8M8 18h5"/></svg>' },
@@ -25,7 +23,6 @@ let currentTab: Tab = (storage.get<string>('lastTab', 'organizer') as Tab) || 'o
 
 const renderers: Record<Tab, (el: HTMLElement) => void> = {
   organizer: renderOrganizer,
-  schedule: renderSchedule,
   calendar: renderCalendar,
   pauprep: renderPauPrep,
   calculator: renderCalculator,
